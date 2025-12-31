@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PoE2 Temple Master - Solver Edition</title>
+    <style>
+        :root { --bg: #0a0a0c; --gold: #d4af37; --spy: #8a2be2; --legion: #ff4500; }
+        body { font-family: 'Cinzel', serif; background: var(--bg); color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(9, 45px); gap: 2px; background: #222; padding: 10px; border: 3px solid #333; }
+        .cell { width: 45px; height: 45px; background: #0f0f12; border: 1px solid #25252b; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .entrance { border: 2px solid var(--gold); background: #2a2310; }
+        .lvl { font-size: 10px; font-weight: bold; color: var(--gold); }
+        .synergy { border-color: #00ff00; box-shadow: inset 0 0 5px #00ff0033; }
+        .ui { margin-top: 20px; background: #16161a; padding: 20px; border-radius: 8px; width: 480px; border: 1px solid #333; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-box { background: #000; padding: 10px; border: 1px solid #444; text-align: center; }
+        .val { color: var(--gold); font-size: 20px; font-weight: bold; display: block; }
+        button { background: #25252b; color: var(--gold); border: 1px solid var(--gold); padding: 8px 15px; cursor: pointer; font-weight: bold; margin: 5px; }
+        .solve-btn { background: var(--gold); color: #000; }
+    </style>
+</head>
+<body>
+    <h2 style="color: var(--gold);">SULO-LOGIC ARCHITECT</h2>
+    <div>
+        <button onclick="reset()">CLEAR</button>
+        <button class="solve-btn" onclick="autoSolve()">ONE-CLICK SOLVE</button>
+    </div>
+    <div id="grid" class="grid"></div>
+    <div class="ui">
+        <div class="stat-grid">
+            <div class="stat-box">RARE POWER<span id="s-rare" class="val">0%</span></div>
+            <div class="stat-box">SPY EFFECT<span id="s-eff" class="val">1.0x</span></div>
+            <div class="stat-box">COMMANDERS<span id="s-com" class="val">0</span></div>
+            <div class="stat-box">MEDALLIONS<span id="s-med" class="val">0%</span></div>
+        </div>
+    </div>
+<script>
+    const S = 9, START_X = 4, START_Y = 0;
+    let map = Array(S).fill().map(() => Array(S).fill(0));
+    function init() {
+        const g = document.getElementById('grid');
+        for(let y=0; y<S; y++) {
+            for(let x=0; x<S; x++) {
+                const c = document.createElement('div');
+                c.id = `c-${x}-${y}`; c.className = 'cell';
+                if(x===START_X && y===START_Y) c.classList.add('entrance');
+                c.onclick = () => { if(x===START_X && y===START_Y) return; map[y][x] = map[y][x] ? 0 : 3; update(); };
+                g.appendChild(c);
+            }
+        }
+        update();
+    }
+    function autoSolve() {
+        reset();
+        const path = [];
+        for(let x=5; x<9; x++) path.push([x,0]);
+        for(let y=1; y<9; y++) {
+            if(y%2===1) { for(let x=8; x>=0; x--) path.push([x,y]); }
+            else { for(let x=0; x<=8; x++) path.push([x,y]); }
+        }
+        for(let x=0; x<4; x++) path.push([x,0]);
+        path.forEach((p, i) => {
+            let t = (i > path.length - 6) ? 2 : (i % 4 === 0 ? 1 : 3);
+            map[p[1]][p[0]] = t;
+        });
+        update();
+    }
+    function update() {
+        let spyLvl = 0, commanders = 0, meds = 0;
+        const connected = new Set([`${START_X},${START_Y}`]);
+        const queue = [[START_X, START_Y]];
+        while(queue.length > 0) {
+            const [cx, cy] = queue.shift();
+            [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dx, dy]) => {
+                const nx = cx+dx, ny = cy+dy;
+                if(nx>=0 && nx<S && ny>=0 && ny<S && map[ny][nx] !== 0 && !connected.has(`${nx},${ny}`)) {
+                    connected.add(`${nx},${ny}`); queue.push([nx,ny]);
+                }
+            });
+        }
+        for(let y=0; y<S; y++) {
+            for(let x=0; x<S; x++) {
+                const el = document.getElementById(`c-${x}-${y}`);
+                const t = map[y][x]; el.className = 'cell';
+                if(x===START_X && y===START_Y) { el.classList.add('entrance'); continue; }
+                if(!t) { el.innerHTML = ''; continue; }
+                const neighbors = [[0,1],[0,-1],[1,0],[-1,0]].filter(([dx,dy]) => {
+                    const nx=x+dx, ny=y+dy;
+                    return nx>=0 && nx<S && ny>=0 && ny<S && (map[ny][nx] !== 0 || (nx===START_X && ny===START_Y));
+                });
+                if(neighbors.length === 2) el.classList.add('synergy');
+                const lvl = Math.min(neighbors.length + 1, 3);
+                const color = ['', '#1e90ff', '#ff4500', '#8a2be2'][t];
+                el.innerHTML = `<span style="color:${color}; font-size:20px;">●</span><span class="lvl">T${lvl}</span>`;
+                if(connected.has(`${x},${y}`)) {
+                    if(t === 3) { spyLvl += lvl; meds += 15; }
+                    if(t === 2 && lvl === 3) { commanders++; meds += 10; }
+                    if(t === 1) meds += 5;
+                } else { el.style.opacity = "0.3"; }
+            }
+        }
+        const eff = 1 + (spyLvl * 0.1);
+        document.getElementById('s-eff').innerText = eff.toFixed(2) + 'x';
+        document.getElementById('s-rare').innerText = Math.round((commanders * 60) * (1 + (commanders * 0.2)) * eff) + '%';
+        document.getElementById('s-com').innerText = commanders;
+        document.getElementById('s-med').innerText = Math.min(meds, 100) + '%';
+    }
+    function reset() { map = Array(S).fill().map(() => Array(S).fill(0)); update(); }
+    init();
+</script>
+</body>
+</html>
